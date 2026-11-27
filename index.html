@@ -694,6 +694,58 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       }
     }
 
+    .pointer-light {
+      position: fixed;
+      z-index: 6;
+      top: 0;
+      left: 0;
+      display: none;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .pointer-light > div {
+      --light-size: 36px;
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: var(--light-size);
+      height: var(--light-size);
+      margin: calc(var(--light-size) * -0.5);
+      border-radius: 50%;
+      background: radial-gradient(circle, rgb(248 220 157 / 0.70), rgb(248 220 157 / 0.18) 31%, transparent 70%);
+    }
+
+    .pointer-light > div + div {
+      background: radial-gradient(circle, rgb(142 215 180 / 0.48), transparent 72%);
+    }
+
+    .pointer-light > div:nth-child(2) {
+      --light-size: 32px;
+      opacity: 0.76;
+    }
+
+    .pointer-light > div:nth-child(3) {
+      --light-size: 26px;
+      opacity: 0.60;
+    }
+
+    .pointer-light > div:nth-child(4) {
+      --light-size: 20px;
+      opacity: 0.40;
+    }
+
+    @media (any-hover: hover) and (any-pointer: fine) and (prefers-reduced-motion: no-preference) {
+      .pointer-light {
+        display: block;
+        transition: opacity 220ms ease-out;
+      }
+
+      .pointer-light.is-visible {
+        opacity: 1;
+      }
+    }
+
     /* 插图和可商用字形子集内嵌于此，便于单文件提交。 */
     @font-face {
       font-family: "Night Lamp Sans";
@@ -811,5 +863,78 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       <p>入社咨询<br>19:45 开始答疑，有关入社和排练分组的问题可以当场提出。</p>
     </div>
   </div>
+  <script>
+    (() => {
+      const motion = window.matchMedia("(any-hover: hover) and (any-pointer: fine) and (prefers-reduced-motion: no-preference)");
+      const trail = document.createElement("div");
+      trail.className = "pointer-light";
+      trail.setAttribute("aria-hidden", "true");
+
+      const lights = [0.68, 0.41, 0.25, 0.15].map((speed) => {
+        const element = document.createElement("div");
+        trail.append(element);
+        return { element, speed, x: 0, y: 0 };
+      });
+
+      let x = 0;
+      let y = 0;
+      let frame = 0;
+      let idleTimer = 0;
+      let visible = false;
+
+      function draw() {
+        let moving = false;
+        for (const light of lights) {
+          const dx = x - light.x;
+          const dy = y - light.y;
+          if (Math.abs(dx) + Math.abs(dy) > 0.4) {
+            light.x += dx * light.speed;
+            light.y += dy * light.speed;
+            moving = true;
+          } else {
+            light.x = x;
+            light.y = y;
+          }
+          light.element.style.transform = `translate3d(${light.x}px, ${light.y}px, 0)`;
+        }
+        frame = moving ? window.requestAnimationFrame(draw) : 0;
+      }
+
+      function hide() {
+        visible = false;
+        trail.classList.remove("is-visible");
+        window.cancelAnimationFrame(frame);
+        window.clearTimeout(idleTimer);
+        frame = 0;
+      }
+
+      function follow(event) {
+        if (event.pointerType !== "mouse" || !motion.matches) return;
+        x = event.clientX + 10;
+        y = event.clientY + 9;
+
+        if (!visible) {
+          if (!trail.isConnected) document.body.append(trail);
+          for (const light of lights) {
+            light.x = x;
+            light.y = y;
+          }
+          draw();
+          trail.classList.add("is-visible");
+          visible = true;
+        } else if (!frame) {
+          frame = window.requestAnimationFrame(draw);
+        }
+
+        window.clearTimeout(idleTimer);
+        idleTimer = window.setTimeout(hide, 520);
+      }
+
+      window.addEventListener("pointermove", follow, { passive: true });
+      window.addEventListener("blur", hide);
+      document.documentElement.addEventListener("pointerleave", hide);
+      motion.addEventListener("change", hide);
+    })();
+  </script>
 </body>
 </html>
