@@ -694,6 +694,21 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       }
     }
 
+    .cursor-strings {
+      position: fixed;
+      z-index: 6;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .cursor-strings {
+        display: none;
+      }
+    }
+
     /* 插图和可商用字形子集内嵌于此，便于单文件提交。 */
     @font-face {
       font-family: "Night Lamp Sans";
@@ -811,5 +826,224 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       <p>入社咨询<br>19:45 开始答疑，有关入社和排练分组的问题可以当场提出。</p>
     </div>
   </div>
+  <script>
+    (() => {
+      const motion = window.matchMedia("(any-hover: hover) and (any-pointer: fine) and (prefers-reduced-motion: no-preference)");
+      const lifetime = 490;
+      const strings = [
+        { side: -1, tint: [122, 235, 195], width: 1.05 },
+        { side: -0.61, tint: [172, 246, 210], width: 1.25 },
+        { side: -0.22, tint: [255, 241, 194], width: 1.65 },
+        { side: 0.22, tint: [255, 215, 140], width: 1.55 },
+        { side: 0.61, tint: [145, 244, 205], width: 1.22 },
+        { side: 1, tint: [100, 218, 181], width: 0.95 },
+      ];
+      const path = [];
+      let pluck;
+      let canvas;
+      let ink;
+      let viewportWidth;
+      let viewportHeight;
+      let frame = 0;
+
+      function paint(rgb, alpha) {
+        return "rgba(" + rgb.join(",") + "," + alpha + ")";
+      }
+
+      function resize() {
+        viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+        viewportHeight = document.documentElement.clientHeight || window.innerHeight;
+        const scale = Math.min(window.devicePixelRatio || 1, 2,
+          Math.sqrt(6_000_000 / (viewportWidth * viewportHeight)));
+        canvas.width = Math.max(1, Math.round(viewportWidth * scale));
+        canvas.height = Math.max(1, Math.round(viewportHeight * scale));
+        ink.setTransform(canvas.width / viewportWidth, 0, 0, canvas.height / viewportHeight, 0, 0);
+        ink.lineCap = "round";
+        ink.lineJoin = "round";
+      }
+
+      function canDraw(event) {
+        if (event.pointerType !== "mouse" || !motion.matches) return false;
+        if (canvas) return Boolean(ink);
+        canvas = document.createElement("canvas");
+        ink = canvas.getContext("2d");
+        if (!ink) return false;
+        canvas.className = "cursor-strings";
+        canvas.setAttribute("aria-hidden", "true");
+        document.body.append(canvas);
+        resize();
+        return true;
+      }
+
+      function drawStrings(now) {
+        const head = path[path.length - 1];
+        const tail = path[0];
+        if (!head) return;
+        const glow = Math.max(0, 1 - Math.max(0, now - head.time) / lifetime);
+        const twist = now * 0.012;
+        const motionFade = glow ** 1.45;
+
+        if (path.length > 1) {
+          const direction = path.map((point, index) => {
+            const left = path[Math.max(0, index - 1)];
+            const right = path[Math.min(path.length - 1, index + 1)];
+            const dx = right.x - left.x;
+            const dy = right.y - left.y;
+            const length = Math.hypot(dx, dy) || 1;
+            return { x: -dy / length, y: dx / length };
+          });
+
+          for (const string of strings) {
+            const filament = path.map((point, index) => {
+              const t = index / (path.length - 1);
+              const arch = Math.sin(t * Math.PI) ** 0.74;
+              const width = (5 + point.energy * 9) * arch + 0.65;
+              const bend = Math.sin(twist - t * 7) * arch * 1.35;
+              const flutter = Math.sin(twist + t * 5 + string.side * 1.9) * arch * 1.4;
+              const offset = string.side * width + bend + flutter;
+              return {
+                x: point.x + direction[index].x * offset,
+                y: point.y + direction[index].y * offset,
+              };
+            });
+
+            ink.beginPath();
+            ink.moveTo(filament[0].x, filament[0].y);
+            for (let index = 1; index < filament.length - 1; index++) {
+              const current = filament[index];
+              const next = filament[index + 1];
+              ink.quadraticCurveTo(current.x, current.y, (current.x + next.x) / 2, (current.y + next.y) / 2);
+            }
+            const last = filament[filament.length - 1];
+            ink.lineTo(last.x, last.y);
+
+            const close = Math.hypot(head.x - tail.x, head.y - tail.y) < 12;
+            const light = ink.createLinearGradient(tail.x, tail.y, close ? tail.x + 16 : head.x, close ? tail.y + 16 : head.y);
+            light.addColorStop(0, paint(string.tint, 0));
+            light.addColorStop(0.38, paint(string.tint, 0.63 * motionFade));
+            light.addColorStop(0.82, paint(string.tint, 0.96 * motionFade));
+            light.addColorStop(1, paint([255, 230, 169], 0.88 * motionFade));
+
+            ink.strokeStyle = paint([22, 102, 77], 0.20 * motionFade);
+            ink.lineWidth = string.width + 1.6;
+            ink.stroke();
+            ink.strokeStyle = light;
+            ink.lineWidth = string.width;
+            ink.stroke();
+          }
+        }
+
+        const haloRadius = 7 + 5 * head.energy;
+        const halo = ink.createRadialGradient(head.x, head.y, 0, head.x, head.y, haloRadius);
+        halo.addColorStop(0, paint([255, 242, 193], 0.64 * motionFade));
+        halo.addColorStop(0.38, paint([255, 210, 130], 0.28 * motionFade));
+        halo.addColorStop(1, paint([108, 222, 176], 0));
+        ink.fillStyle = halo;
+        ink.fillRect(head.x - haloRadius, head.y - haloRadius, haloRadius * 2, haloRadius * 2);
+      }
+
+      function drawPluck(now) {
+        if (!pluck) return;
+        const time = Math.max(0, now - pluck.time);
+        if (time >= 430) {
+          pluck = undefined;
+          return;
+        }
+
+        for (const [index, string] of strings.entries()) {
+          const age = Math.max(0, time - index * 8) / 430;
+          const opacity = (1 - age) ** 1.2;
+          const vibration = Math.sin(age * 25 - index * 0.36) * (1 - age) ** 2 * 18;
+          const span = 18 + 23 * Math.sqrt(age);
+          const offset = string.side * 7;
+          const startX = pluck.x - pluck.dx * span - pluck.dy * offset;
+          const startY = pluck.y - pluck.dy * span + pluck.dx * offset;
+          const endX = pluck.x + pluck.dx * span - pluck.dy * offset;
+          const endY = pluck.y + pluck.dy * span + pluck.dx * offset;
+          const curveX = pluck.x - pluck.dy * (offset + vibration);
+          const curveY = pluck.y + pluck.dx * (offset + vibration);
+          const outline = ink.createLinearGradient(startX, startY, endX, endY);
+          outline.addColorStop(0, paint([24, 83, 62], 0));
+          outline.addColorStop(0.5, paint([24, 83, 62], opacity * 0.32));
+          outline.addColorStop(1, paint([24, 83, 62], 0));
+          const tint = ink.createLinearGradient(startX, startY, endX, endY);
+          tint.addColorStop(0, paint(string.tint, 0));
+          tint.addColorStop(0.5, paint(string.tint, opacity * 0.94));
+          tint.addColorStop(1, paint(string.tint, 0));
+          ink.beginPath();
+          ink.moveTo(startX, startY);
+          ink.quadraticCurveTo(curveX, curveY, endX, endY);
+          ink.strokeStyle = outline;
+          ink.lineWidth = string.width + 1.2;
+          ink.stroke();
+          ink.strokeStyle = tint;
+          ink.lineWidth = string.width;
+          ink.stroke();
+        }
+      }
+
+      function draw(now) {
+        frame = 0;
+        ink.clearRect(0, 0, viewportWidth, viewportHeight);
+        while (path.length && now - path[0].time >= lifetime) path.shift();
+        drawStrings(now);
+        drawPluck(now);
+        if (path.length || pluck) frame = window.requestAnimationFrame(draw);
+      }
+
+      function track(event) {
+        if (!canDraw(event)) return;
+        const time = window.performance.now();
+        let last = path[path.length - 1];
+        if (last && time - last.time >= 105) {
+          path.length = 0;
+          last = undefined;
+        }
+        const x = event.clientX + 9;
+        const y = event.clientY + 9;
+        const distance = last ? Math.hypot(x - last.x, y - last.y) : 0;
+        if (last && distance < 2) return;
+        const energy = last ? Math.min(1, distance / Math.max(6, time - last.time) / 1.4) : 0;
+        path.push({ x, y, time, energy });
+        if (path.length > 48) path.shift();
+        if (!frame) frame = window.requestAnimationFrame(draw);
+      }
+
+      function strike(event) {
+        if (event.button !== 0 || !canDraw(event)) return;
+        const x = event.clientX + 8;
+        const y = event.clientY + 10;
+        const before = path[Math.max(0, path.length - 4)];
+        const dx = before ? x - before.x : 0;
+        const dy = before ? y - before.y : 0;
+        const length = Math.hypot(dx, dy);
+        pluck = { x, y, dx: length > 3 ? dx / length : 1, dy: length > 3 ? dy / length : 0,
+          time: window.performance.now() };
+        if (!frame) frame = window.requestAnimationFrame(draw);
+      }
+
+      function clear() {
+        window.cancelAnimationFrame(frame);
+        frame = 0;
+        path.length = 0;
+        pluck = undefined;
+        if (ink) ink.clearRect(0, 0, viewportWidth, viewportHeight);
+      }
+
+      window.addEventListener("pointermove", track, { passive: true });
+      window.addEventListener("pointerdown", strike, { passive: true });
+      window.addEventListener("blur", clear);
+      window.addEventListener("resize", () => {
+        clear();
+        if (ink) resize();
+      });
+      document.documentElement.addEventListener("pointerleave", clear);
+      document.documentElement.addEventListener("pointercancel", clear);
+      document.addEventListener("visibilitychange", () => {
+        if (document.hidden) clear();
+      });
+      motion.addEventListener("change", clear);
+    })();
+  </script>
 </body>
 </html>
