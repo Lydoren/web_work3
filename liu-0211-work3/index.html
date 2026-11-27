@@ -829,7 +829,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
   <script>
     (() => {
       const mouseMotion = window.matchMedia("(any-hover: hover) and (any-pointer: fine) and (prefers-reduced-motion: no-preference)");
-      const ribbonLife = 390;
+      const ribbonLife = 480;
       const points = [];
       const sparks = [];
       const rings = [];
@@ -888,7 +888,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           const before = points[i - 1];
           const point = points[i];
           const after = points[i + 1];
-          const age = 1 - Math.max(0, now - point.time) / ribbonLife;          const glow = age * age;
+          const age = 1 - Math.max(0, now - point.time) / ribbonLife;          const glow = age * (0.58 + 0.42 * age);
           const size = (3.6 + 6.2 * point.energy) * (0.28 + 0.72 * age);
 
           context.beginPath();
@@ -898,13 +898,13 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
                                    after ? (point.x + after.x) / 2 : point.x,
                                    after ? (point.y + after.y) / 2 : point.y);
           context.lineWidth = size + 3;
-          context.strokeStyle = color(22, 84, 61, 0.27 * glow);
+          context.strokeStyle = color(22, 84, 61, 0.32 * glow);
           context.stroke();
           context.lineWidth = size;
-          context.strokeStyle = color(112, 233, 183, 0.52 * glow);
+          context.strokeStyle = color(112, 233, 183, 0.60 * glow);
           context.stroke();
-          context.lineWidth = Math.max(0.7, size * 0.29);
-          context.strokeStyle = color(255, 219, 147, 0.92 * glow);
+          context.lineWidth = Math.max(0.7, size * 0.34);
+          context.strokeStyle = color(255, 222, 152, 0.97 * glow);
           context.stroke();
         }
 
